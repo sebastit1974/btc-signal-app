@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BTC Signal">
+<title>BTC Signal & Bilanca</title>
+<style>
+  :root {
+    --bg: #0a1210;
+    --bg-panel: #101c19;
+    --line: #1e2f2a;
+    --amber: #f0b429;
+    --amber-dim: #7a5e1c;
+    --green: #3ecf7e;
+    --green-dim: #143d26;
+    --red: #ef5b5b;
+    --red-dim: #3a1616;
+    --ink: #eef3f0;
+    --ink-dim: #7f948d;
+    --mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    --sans: "Inter", -apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    min-height: 100vh; min-height: 100dvh;
+  }
+
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    display: flex; flex-direction: column;
+    background-image: radial-gradient(ellipse 120% 60% at 50% -10%, rgba(240,180,41,0.07), transparent 60%);
+  }
+
+  .ticker-rail {
+    overflow: hidden; border-bottom: 1px solid var(--line);
+    background: #060b09; height: 34px; display: flex; align-items: center; white-space: nowrap;
+  }
+  .ticker-track {
+    display: inline-flex; animation: scroll 22s linear infinite;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
+    color: var(--amber-dim); padding-left: 100%;
+  }
+  .ticker-track span { padding: 0 28px; color: var(--ink-dim); }
+  .ticker-track span b { color: var(--amber); font-weight: 600; }
+  @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
+  main {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 24px 18px 40px; max-width: 480px; margin: 0 auto; width: 100%;
+  }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-dim); margin: 14px 0 6px;
+  }
+  h1 { font-size: 22px; font-weight: 650; margin: 0 0 20px; letter-spacing: -0.01em; }
+  h1 span { color: var(--amber); }
+
+  .status-card {
+    width: 100%; border-radius: 20px; border: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--bg-panel), #0c1815);
+    padding: 28px 22px; text-align: center; position: relative; overflow: hidden;
+  }
+  .status-card::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 0%, var(--glow, rgba(240,180,41,0.12)), transparent 65%);
+    pointer-events: none;
+  }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 999px;
+    font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; margin-bottom: 18px;
+  }
+  .badge.in { background: var(--green-dim); color: var(--green); border: 1px solid rgba(62,207,126,0.35); }
+  .badge.out { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,91,91,0.35); }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+  .price { font-family: var(--mono); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; margin-bottom: 6px; }
+  .price small { font-size: 16px; color: var(--ink-dim); font-weight: 400; }
+  .distance { font-family: var(--mono); font-size: 14px; margin-bottom: 20px; }
+  .distance.pos { color: var(--green); } .distance.neg { color: var(--red); }
+
+  .divider { height: 1px; background: var(--line); margin: 18px 0; width: 100%; }
+
+  .alert-box {
+    margin-top: 18px; padding: 16px; border-radius: 14px; text-align: left;
+    font-size: 14px; line-height: 1.5; display: none;
+  }
+  .alert-box.show { display: block; }
+  .alert-box.buy { background: var(--green-dim); border: 1px solid rgba(62,207,126,0.4); color: var(--ink); }
+  .alert-box.sell { background: var(--red-dim); border: 1px solid rgba(239,91,91,0.4); color: var(--ink); }
+  .alert-box b { display: block; margin-bottom: 4px; font-size: 15px; }
+
+  .section {
+    width: 100%; margin-top: 22px; border-radius: 20px; border: 1px solid var(--line);
+    background: var(--bg-panel); padding: 22px;
+  }
+  .section h2 {
+    font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-dim);
+    margin: 0 0 16px; font-weight: 600;
+  }
+
+  .ledger-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .ledger-row:last-child { border-bottom: none; }
+  .ledger-row .label { color: var(--ink-dim); }
+  .ledger-row .value { font-family: var(--mono); font-weight: 600; }
+  .ledger-row .value.cash { color: var(--amber); }
+  .ledger-row .value.invested { color: var(--green); }
+
+  input[type=number] {
+    width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line);
+    background: #060b09; color: var(--ink); font-family: var(--mono); font-size: 16px; margin-bottom: 12px;
+  }
+  input[type=number]:focus { outline: 1px solid var(--amber); }
+
+  .btn {
+    width: 100%; padding: 15px; border-radius: 14px; border: 1px solid var(--line);
+    background: var(--bg-panel); color: var(--ink); font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; margin-top: 8px;
+  }
+  .btn.primary { background: var(--amber); color: #0a1210; border: none; }
+  .btn:active { opacity: 0.8; }
+
+  .history { max-height: 240px; overflow-y: auto; }
+  .history-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item .tag {
+    font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 6px; margin-right: 8px; font-weight: 600;
+  }
+  .tag.buy { background: var(--green-dim); color: var(--green); }
+  .tag.sell { background: var(--red-dim); color: var(--red); }
+  .tag.deposit { background: var(--amber-dim); color: var(--amber); }
+  .history-date { color: var(--ink-dim); font-family: var(--mono); font-size: 12px; }
+  .history-empty { color: var(--ink-dim); font-size: 13px; text-align: center; padding: 20px 0; }
+
+  .updated { margin-top: 14px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); opacity: 0.6; }
+  .footnote { margin-top: 28px; font-size: 12px; color: var(--ink-dim); text-align: center; line-height: 1.6; opacity: 0.75; }
+  .error { color: var(--red); font-size: 14px; text-align: center; padding: 20px 0; }
+  .skeleton { opacity: 0.35; filter: blur(2px); }
+</style>
+</head>
+<body>
+
+  <div class="ticker-rail">
+    <div class="ticker-track" id="tickerTrack"><span>UČITAVANJE<b>&nbsp;...</b></span></div>
+  </div>
+
+  <main>
+    <div class="eyebrow">SMA 11 / 104 &middot; DNEVNI SIGNAL</div>
+    <h1>Bitcoin <span>trend</span> &amp; bilanca</h1>
+
+    <div class="status-card" id="card">
+      <div class="badge skeleton" id="badge"><span class="dot"></span> UČITAVANJE</div>
+      <div class="price skeleton" id="price">&mdash;</div>
+      <div class="distance skeleton" id="distance">&mdash;</div>
+
+      <div class="alert-box" id="alertBox">
+        <b id="alertTitle"></b>
+        <span id="alertBody"></span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Zabilježi mjesečnu uplatu</h2>
+      <input type="number" id="depositInput" placeholder="Iznos u EUR (npr. 200)" inputmode="decimal">
+      <button class="btn primary" onclick="recordDeposit()">Zabilježi uplatu</button>
+      <div class="footnote" style="margin-top:12px; text-align:left;">
+        Ako je signal zelen, iznos ide u "uloženo". Ako je crven, ide u "gotovina koja čeka".
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Bilanca</h2>
+      <div class="ledger-row"><span class="label">Ukupno uplaćeno</span><span class="value" id="totalDeposited">0 €</span></div>
+      <div class="ledger-row"><span class="label">Trenutno uloženo u BTC</span><span class="value invested" id="totalInvested">0 €</span></div>
+      <div class="ledger-row"><span class="label">Gotovina koja čeka signal</span><span class="value cash" id="cashWaiting">0 €</span></div>
+      <div class="ledger-row"><span class="label">Zadnja akcija</span><span class="value" id="lastAction">&mdash;</span></div>
+    </div>
+
+    <div class="section">
+      <h2>Povijest</h2>
+      <div class="history" id="history">
+        <div class="history-empty">Još nema zabilježenih akcija.</div>
+      </div>
+      <button class="btn" onclick="resetLedger()" style="margin-top:16px; font-size:13px; opacity:0.6;">Resetiraj bilancu</button>
+    </div>
+
+    <div class="updated" id="updated"></div>
+    <div class="footnote">
+      Podaci se čuvaju lokalno na ovom telefonu/pregledniku. Napravi povremeno screenshot povijesti kao rezervnu kopiju —
+      Safari može obrisati lokalne podatke ako app ne otvoriš dulje od tjedan dana.
+    </div>
+  </main>
+
+<script>
+const SMA_LONG = 104;
+const SMA_SHORT = 11;
+const STORAGE_KEY = 'btc_signal_ledger_v1';
+
+let currentSignalIsBullish = null;
+
+function fmtEUR(n) {
+  return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+}
+
+function loadLedger() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { totalDeposited: 0, invested: 0, cash: 0, lastSignal: null, history: [] };
+    return JSON.parse(raw);
+  } catch (e) {
+    return { totalDeposited: 0, invested: 0, cash: 0, lastSignal: null, history: [] };
+  }
+}
+
+function saveLedger(ledger) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger));
+}
+
+function renderLedger() {
+  const ledger = loadLedger();
+  document.getElementById('totalDeposited').textContent = fmtEUR(ledger.totalDeposited);
+  document.getElementById('totalInvested').textContent = fmtEUR(ledger.invested);
+  document.getElementById('cashWaiting').textContent = fmtEUR(ledger.cash);
+
+  const last = ledger.history[ledger.history.length - 1];
+  document.getElementById('lastAction').textContent = last ? last.label : '—';
+
+  const historyEl = document.getElementById('history');
+  if (ledger.history.length === 0) {
+    historyEl.innerHTML = '<div class="history-empty">Još nema zabilježenih akcija.</div>';
+  } else {
+    historyEl.innerHTML = ledger.history.slice().reverse().map(item => `
+      <div class="history-item">
+        <div><span class="tag ${item.type}">${item.type.toUpperCase()}</span>${item.label}</div>
+        <div class="history-date">${item.date}</div>
+      </div>
+    `).join('');
+  }
+}
+
+function recordDeposit() {
+  const input = document.getElementById('depositInput');
+  const amount = parseFloat(input.value);
+  if (!amount || amount <= 0) return;
+
+  const ledger = loadLedger();
+  const dateStr = new Date().toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  ledger.totalDeposited += amount;
+
+  if (currentSignalIsBullish) {
+    ledger.invested += amount;
+    ledger.history.push({ type: 'buy', label: `Uplata ${fmtEUR(amount)} uložena u BTC`, date: dateStr });
+  } else {
+    ledger.cash += amount;
+    ledger.history.push({ type: 'deposit', label: `Uplata ${fmtEUR(amount)} čeka u gotovini (signal crven)`, date: dateStr });
+  }
+
+  saveLedger(ledger);
+  renderLedger();
+  input.value = '';
+}
+
+function executeSell() {
+  const ledger = loadLedger();
+  const dateStr = new Date().toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const soldAmount = ledger.invested;
+
+  ledger.cash += soldAmount;
+  ledger.invested = 0;
+  ledger.history.push({ type: 'sell', label: `Prodan sav BTC (${fmtEUR(soldAmount)}) — signal crven`, date: dateStr });
+
+  saveLedger(ledger);
+  renderLedger();
+}
+
+function executeBuy() {
+  const ledger = loadLedger();
+  const dateStr = new Date().toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const investedAmount = ledger.cash;
+
+  ledger.invested += investedAmount;
+  ledger.cash = 0;
+  ledger.history.push({ type: 'buy', label: `Uložen sav cash (${fmtEUR(investedAmount)}) — signal zelen`, date: dateStr });
+
+  saveLedger(ledger);
+  renderLedger();
+}
+
+function resetLedger() {
+  if (!confirm('Sigurno resetirati cijelu bilancu? Ovo se ne može poništiti.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  renderLedger();
+}
+
+function sma(arr, period, endIndex) {
+  const slice = arr.slice(endIndex - period + 1, endIndex + 1);
+  return slice.reduce((a, b) => a + b, 0) / period;
+}
+
+async function loadSignal() {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=eur&days=200&interval=daily');
+    if (!res.ok) throw new Error('API greška ' + res.status);
+    const data = await res.json();
+
+    const prices = data.prices.map(p => p[1]);
+    const n = prices.length - 1;
+
+    const currentPrice = prices[n];
+    const currentSmaLong = sma(prices, SMA_LONG, n);
+    const prevPrice = prices[n - 1];
+    const prevSmaLong = sma(prices, SMA_LONG, n - 1);
+
+    const isBullish = currentPrice > currentSmaLong;
+    const wasBullish = prevPrice > prevSmaLong;
+    const justCrossed = isBullish !== wasBullish;
+    const distancePct = ((currentPrice - currentSmaLong) / currentSmaLong) * 100;
+
+    currentSignalIsBullish = isBullish;
+
+    render({ isBullish, justCrossed, currentPrice, currentSmaLong, distancePct });
+    renderLedger();
+
+  } catch (err) {
+    document.querySelector('main').insertAdjacentHTML('afterbegin', '<div class="error">Ne mogu dohvatiti podatke. Provjeri internet.</div>');
+  }
+}
+
+function render(s) {
+  const card = document.getElementById('card');
+  const badge = document.getElementById('badge');
+  const price = document.getElementById('price');
+  const distance = document.getElementById('distance');
+  const alertBox = document.getElementById('alertBox');
+
+  [badge, price, distance].forEach(el => el.classList.remove('skeleton'));
+
+  if (s.isBullish) {
+    badge.className = 'badge in';
+    badge.innerHTML = '<span class="dot"></span> U POZICIJI &middot; DRŽI / KUPI';
+    card.style.setProperty('--glow', 'rgba(62,207,126,0.14)');
+  } else {
+    badge.className = 'badge out';
+    badge.innerHTML = '<span class="dot"></span> IZVAN &middot; ČEKAJ';
+    card.style.setProperty('--glow', 'rgba(239,91,91,0.14)');
+  }
+
+  price.innerHTML = fmtEUR(s.currentPrice) + ' <small>BTC/EUR</small>';
+  distance.className = 'distance ' + (s.distancePct >= 0 ? 'pos' : 'neg');
+  distance.textContent = (s.distancePct >= 0 ? '+' : '') + s.distancePct.toFixed(2) + '% od SMA(104)';
+
+  const ledger = loadLedger();
+  const signalChangedSinceLastCheck = ledger.lastSignal !== null && ledger.lastSignal !== s.isBullish;
+
+  if (signalChangedSinceLastCheck && !s.isBullish && ledger.invested > 0) {
+    alertBox.className = 'alert-box sell show';
+    document.getElementById('alertTitle').textContent = '⚠ Signal je pao — PRODAJ BTC';
+    document.getElementById('alertBody').innerHTML = `Trenutno imaš ${fmtEUR(ledger.invested)} uloženo. Prodaj na burzi, zatim potvrdi ovdje.
+      <button class="btn" style="margin-top:10px; background:var(--red-dim); border-color:rgba(239,91,91,0.4);" onclick="executeSell()">Potvrdi prodaju</button>`;
+  } else if (signalChangedSinceLastCheck && s.isBullish && ledger.cash > 0) {
+    alertBox.className = 'alert-box buy show';
+    document.getElementById('alertTitle').textContent = '✓ Signal je skočio — ULOŽI CASH';
+    document.getElementById('alertBody').innerHTML = `Imaš ${fmtEUR(ledger.cash)} gotovine koja čeka. Uloži na burzi, zatim potvrdi ovdje.
+      <button class="btn" style="margin-top:10px; background:var(--green-dim); border-color:rgba(62,207,126,0.4);" onclick="executeBuy()">Potvrdi kupnju</button>`;
+  } else {
+    alertBox.className = 'alert-box';
+  }
+
+  ledger.lastSignal = s.isBullish;
+  saveLedger(ledger);
+
+  const ticker = document.getElementById('tickerTrack');
+  const dir = s.distancePct >= 0 ? '▲' : '▼';
+  ticker.innerHTML = `
+    <span>BTC/EUR <b>${fmtEUR(s.currentPrice)}</b></span>
+    <span>${dir} ${Math.abs(s.distancePct).toFixed(2)}% OD SMA104</span>
+    <span>SIGNAL <b>${s.isBullish ? 'BUY/DRŽI' : 'SELL/ČEKAJ'}</b></span>
+    <span>BTC/EUR <b>${fmtEUR(s.currentPrice)}</b></span>
+    <span>${dir} ${Math.abs(s.distancePct).toFixed(2)}% OD SMA104</span>
+    <span>SIGNAL <b>${s.isBullish ? 'BUY/DRŽI' : 'SELL/ČEKAJ'}</b></span>
+  `;
+
+  document.getElementById('updated').textContent =
+    'Ažurirano ' + new Date().toLocaleString('hr-HR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+}
+
+loadSignal();
+</script>
+
+</body>
+</html>
