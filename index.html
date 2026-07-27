@@ -209,28 +209,70 @@ const SMA_LONG = 104;
 const SMA_SHORT = 11;
 const STORAGE_KEY = 'btc_signal_ledger_v1';
 
+const SUPABASE_URL = 'https://oleurqeypqjyzlprmifl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Z4GDYm2qQefT8ZryV_WKBg_hLW0U4Mm';
+const LEDGER_ROW_KEY = 'btc_ledger_main';
+
 let currentSignalIsBullish = null;
+let ledgerCache = null;
 
 function fmtEUR(n) {
   return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 }
 
-function loadLedger() {
+function defaultLedger() {
+  return { totalDeposited: 0, invested: 0, cash: 0, lastSignal: null, history: [] };
+}
+
+async function loadLedger() {
+  if (ledgerCache) return ledgerCache;
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { totalDeposited: 0, invested: 0, cash: 0, lastSignal: null, history: [] };
-    return JSON.parse(raw);
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/kv_store?key=eq.${LEDGER_ROW_KEY}&select=value`,
+      {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        },
+      }
+    );
+    const rows = await res.json();
+
+    if (rows && rows.length > 0) {
+      ledgerCache = rows[0].value;
+      return ledgerCache;
+    }
+
+    ledgerCache = defaultLedger();
+    return ledgerCache;
   } catch (e) {
-    return { totalDeposited: 0, invested: 0, cash: 0, lastSignal: null, history: [] };
+    ledgerCache = defaultLedger();
+    return ledgerCache;
   }
 }
 
-function saveLedger(ledger) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger));
+async function saveLedger(ledger) {
+  ledgerCache = ledger;
+
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/kv_store`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ key: LEDGER_ROW_KEY, value: ledger, updated_at: new Date().toISOString() }),
+    });
+  } catch (e) {
+    console.error('Greska pri spremanju u cloud:', e);
+  }
 }
 
-function renderLedger() {
-  const ledger = loadLedger();
+async function renderLedger() {
+  const ledger = await loadLedger();
   document.getElementById('totalDeposited').textContent = fmtEUR(ledger.totalDeposited);
   document.getElementById('totalInvested').textContent = fmtEUR(ledger.invested);
   document.getElementById('cashWaiting').textContent = fmtEUR(ledger.cash);
@@ -251,12 +293,12 @@ function renderLedger() {
   }
 }
 
-function recordDeposit() {
+async function recordDeposit() {
   const input = document.getElementById('depositInput');
   const amount = parseFloat(input.value);
   if (!amount || amount <= 0) return;
 
-  const ledger = loadLedger();
+  const ledger = await loadLedger();
   const dateStr = new Date().toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   ledger.totalDeposited += amount;
@@ -269,13 +311,13 @@ function recordDeposit() {
     ledger.history.push({ type: 'deposit', label: `Uplata ${fmtEUR(amount)} čeka u gotovini (signal crven)`, date: dateStr });
   }
 
-  saveLedger(ledger);
-  renderLedger();
+  await saveLedger(ledger);
+  await renderLedger();
   input.value = '';
 }
 
-function executeSell() {
-  const ledger = loadLedger();
+async function executeSell() {
+  const ledger = await loadLedger();
   const dateStr = new Date().toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const soldAmount = ledger.invested;
 
@@ -283,12 +325,12 @@ function executeSell() {
   ledger.invested = 0;
   ledger.history.push({ type: 'sell', label: `Prodan sav BTC (${fmtEUR(soldAmount)}) — signal crven`, date: dateStr });
 
-  saveLedger(ledger);
-  renderLedger();
+  await saveLedger(ledger);
+  await renderLedger();
 }
 
-function executeBuy() {
-  const ledger = loadLedger();
+async function executeBuy() {
+  const ledger = await loadLedger();
   const dateStr = new Date().toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const investedAmount = ledger.cash;
 
@@ -296,14 +338,15 @@ function executeBuy() {
   ledger.cash = 0;
   ledger.history.push({ type: 'buy', label: `Uložen sav cash (${fmtEUR(investedAmount)}) — signal zelen`, date: dateStr });
 
-  saveLedger(ledger);
-  renderLedger();
+  await saveLedger(ledger);
+  await renderLedger();
 }
 
-function resetLedger() {
+async function resetLedger() {
   if (!confirm('Sigurno resetirati cijelu bilancu? Ovo se ne može poništiti.')) return;
-  localStorage.removeItem(STORAGE_KEY);
-  renderLedger();
+  const empty = defaultLedger();
+  await saveLedger(empty);
+  await renderLedger();
 }
 
 function sma(arr, period, endIndex) {
@@ -332,15 +375,15 @@ async function loadSignal() {
 
     currentSignalIsBullish = isBullish;
 
-    render({ isBullish, justCrossed, currentPrice, currentSmaLong, distancePct });
-    renderLedger();
+    await render({ isBullish, justCrossed, currentPrice, currentSmaLong, distancePct });
+    await renderLedger();
 
   } catch (err) {
     document.querySelector('main').insertAdjacentHTML('afterbegin', '<div class="error">Ne mogu dohvatiti podatke. Provjeri internet.</div>');
   }
 }
 
-function render(s) {
+async function render(s) {
   const card = document.getElementById('card');
   const badge = document.getElementById('badge');
   const price = document.getElementById('price');
@@ -363,7 +406,7 @@ function render(s) {
   distance.className = 'distance ' + (s.distancePct >= 0 ? 'pos' : 'neg');
   distance.textContent = (s.distancePct >= 0 ? '+' : '') + s.distancePct.toFixed(2) + '% od SMA(104)';
 
-  const ledger = loadLedger();
+  const ledger = await loadLedger();
   const signalChangedSinceLastCheck = ledger.lastSignal !== null && ledger.lastSignal !== s.isBullish;
 
   if (signalChangedSinceLastCheck && !s.isBullish && ledger.invested > 0) {
@@ -381,7 +424,7 @@ function render(s) {
   }
 
   ledger.lastSignal = s.isBullish;
-  saveLedger(ledger);
+  await saveLedger(ledger);
 
   const ticker = document.getElementById('tickerTrack');
   const dir = s.distancePct >= 0 ? '▲' : '▼';
